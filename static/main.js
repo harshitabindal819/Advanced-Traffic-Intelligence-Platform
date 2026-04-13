@@ -42,7 +42,6 @@ function uploadAndExtract(file) {
     .catch(err => alert('Upload failed: ' + err.message));
 }
 
-// Unlimited Clicks Logic
 canvas.addEventListener('mousedown', function(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -64,7 +63,6 @@ function updateInstructions() {
     const totalLanesCompleted = Math.floor(clickedPoints.length / 4);
     const ptsNeeded = 4 - (clickedPoints.length % 4);
 
-    // If at least one lane is fully completed, enable the buttons
     if (totalLanesCompleted > 0 && ptsNeeded === 4) {
         instr.textContent = `✓ ${totalLanesCompleted} Lane(s) defined. Draw another or Run Analysis.`;
         instr.style.color = "#00ff9d";
@@ -73,7 +71,6 @@ function updateInstructions() {
     } else {
         instr.textContent = `Click ${ptsNeeded} more point(s) to define Lane ${totalLanesCompleted + 1}`;
         instr.style.color = "var(--accent2)";
-        // Disable buttons if halfway through drawing a lane
         btnDet.disabled = true; btnDet.style.opacity = 0.5;
         btnSim.disabled = true; btnSim.style.opacity = 0.5;
     }
@@ -123,15 +120,11 @@ function drawPolygon(pts, color) {
 }
 
 function resetCalibration() {
-    // Remove the last active or fully completed lane
     if (clickedPoints.length % 4 !== 0) {
-        // Drop the partially completed points
         clickedPoints = clickedPoints.slice(0, Math.floor(clickedPoints.length / 4) * 4);
     } else if (clickedPoints.length >= 4) {
-        // Drop the last full lane
         clickedPoints = clickedPoints.slice(0, clickedPoints.length - 4);
     }
-    
     updateInstructions();
     redrawCanvas();
 }
@@ -142,7 +135,6 @@ function submitCalibration(simulateEmergency) {
   document.getElementById('calibrationPanel').style.display = 'none';
   document.getElementById('loadingPanel').style.display = 'block';
 
-  // Chunk the flat array into groups of 4 points
   const lanesPayload = [];
   for (let i = 0; i < clickedPoints.length; i += 4) {
       lanesPayload.push(clickedPoints.slice(i, i + 4));
@@ -164,10 +156,9 @@ function submitCalibration(simulateEmergency) {
       document.getElementById('loadingPanel').style.display = 'none';
       document.getElementById('resultsPanel').style.display = 'block';
 
-      // 1. DYNAMICALLY GENERATE LANE STATS
+      // 1. Dynamic Lane Stats
       const statsContainer = document.getElementById('dynamicLaneStats');
-      statsContainer.innerHTML = ''; // Clear container
-      
+      statsContainer.innerHTML = ''; 
       const colorPalette = ['#00ccff', '#ffcc00', '#ff6600', '#ff00ff', '#00ff00', '#00ffff'];
 
       Object.keys(data.lane_densities).forEach((laneName, index) => {
@@ -175,7 +166,6 @@ function submitCalibration(simulateEmergency) {
           const div = document.createElement('div');
           div.className = 'stat-card';
           
-          // Apply a subtle border tint mapping to the lane colors
           const themeColor = colorPalette[index % colorPalette.length];
           div.style.borderColor = themeColor;
           div.style.background = `rgba(${hexToRgb(themeColor)}, 0.05)`;
@@ -187,11 +177,10 @@ function submitCalibration(simulateEmergency) {
           statsContainer.appendChild(div);
       });
 
-      // Update remaining generic stats
       document.getElementById('statConf').textContent = Math.round(parseFloat(data.avg_confidence) * 100) + '%';
       document.getElementById('statFrames').textContent = data.frames_processed;
 
-      // Emergency Routing Logic
+      // 2. Emergency Routing Logic
       const dashboard = document.getElementById('emergencyDashboard');
       const statusInd = document.getElementById('statusIndicator');
       document.getElementById('recommendedLaneTxt').textContent = data.recommended_lane.toUpperCase();
@@ -204,7 +193,21 @@ function submitCalibration(simulateEmergency) {
           statusInd.textContent = "NORMAL TRAFFIC FLOW";
       }
 
-      // Output Video
+      // 3. ANPR Plate Logic
+      const plateContainer = document.getElementById('plateLogContainer');
+      if (data.plates && data.plates.length > 0) {
+          plateContainer.innerHTML = '';
+          data.plates.forEach(plateTxt => {
+              const tag = document.createElement('div');
+              tag.className = 'plate-tag';
+              tag.textContent = plateTxt;
+              plateContainer.appendChild(tag);
+          });
+      } else {
+          plateContainer.innerHTML = '<span style="color: var(--muted);">No highly confident plates detected.</span>';
+      }
+
+      // 4. Output Video
       const outputSrc = '/static/' + data.output + '?t=' + Date.now();
       const vid = document.getElementById('outputVideo');
       vid.src = outputSrc; 
@@ -218,7 +221,6 @@ function submitCalibration(simulateEmergency) {
   });
 }
 
-// Helper to tint backgrounds dynamically
 function hexToRgb(hex) {
     const bigint = parseInt(hex.replace('#',''), 16);
     const r = (bigint >> 16) & 255;

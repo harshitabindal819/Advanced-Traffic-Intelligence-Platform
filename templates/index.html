@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TrafficAI — Emergency Routing System</title>
+  <title>TrafficAI — Emergency Routing & ANPR</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap"
     rel="stylesheet">
@@ -19,14 +19,14 @@
       <div class="logo-icon">🚑</div>
       <div class="logo-text">TRAFFIC<span>AI</span></div>
     </div>
-    <div class="header-badge">● DYNAMIC MULTI-LANE CALIBRATION</div>
+    <div class="header-badge">● PREEMPTION & ANPR ACTIVE</div>
   </header>
 
   <div class="hero">
     <div class="hero-tag">// SMART CITY ROUTING</div>
-    <h1>Variable Lane Density &<br>Emergency Preemption</h1>
-    <p>Upload footage, map as many lanes as needed, and let the AI instantly route emergency vehicles to the clearest
-      path.</p>
+    <h1>Multi-Lane Density &<br>Automatic Plate Recognition</h1>
+    <p>Interact with the canvas to calibrate lanes, route emergency vehicles dynamically, and log license plates in
+      real-time.</p>
   </div>
 
   <div class="container">
@@ -69,10 +69,11 @@
         <div class="radar-circle"></div>
         <div class="radar-sweep"></div>
       </div>
-      <div class="loading-title">ANALYZING CUSTOM LANES</div>
+      <div class="loading-title">ANALYZING CUSTOM LANES & OCR PLATES</div>
     </div>
 
     <div class="results-panel" id="resultsPanel">
+
       <div class="emergency-dashboard" id="emergencyDashboard">
         <div class="status-indicator" id="statusIndicator">NORMAL TRAFFIC FLOW</div>
         <div class="lane-recommendation">
@@ -81,8 +82,14 @@
         </div>
       </div>
 
-      <div class="stats-row" id="dynamicLaneStats">
+      <div class="anpr-panel">
+        <div class="panel-header"><span class="panel-title">// ANPR LOG: DETECTED LICENSE PLATES</span></div>
+        <div class="plate-log" id="plateLogContainer">
+          <span style="color: var(--muted);">Waiting for detections...</span>
+        </div>
       </div>
+
+      <div class="stats-row" id="dynamicLaneStats"></div>
 
       <div class="stats-row" style="grid-template-columns: repeat(2, 1fr);">
         <div class="stat-card">
@@ -107,7 +114,7 @@
     </div>
   </div>
 
-  <footer>TRAFFICAI &nbsp;|&nbsp; VARIABLE LANE ARCHITECTURE</footer>
+  <footer>TRAFFICAI &nbsp;|&nbsp; VARIABLE LANE ARCHITECTURE & ANPR</footer>
   <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>
 

@@ -5,18 +5,21 @@ import cv2
 import uuid
 import subprocess
 import numpy as np
+import easyocr
 
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 RESULTS_FOLDER = os.path.join(BASE_DIR, 'static', 'results')
-MODEL_PATH = r'C:\Users\Riya Saharan\YOLOv8_Traffic_Density_Estimation\runs\detect\train2\weights\best.pt'
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
+# Initialize Models
+print("Loading YOLOv8 and EasyOCR... Please wait.")
 model = YOLO('yolov8n.pt')
+reader = easyocr.Reader(['en'], gpu=False)
 CONF_THRESHOLD = 0.50
 
 TARGET_CLASSES = {
@@ -28,15 +31,28 @@ CLASS_COLORS = {
     'truck': (255, 50, 80), 'bicycle': (200, 0, 200), 'ambulance': (0, 0, 255)
 }
 
-# A repeating color palette for dynamically generated lanes (BGR format)
 LANE_COLORS = [
-    (255, 100, 0),   # Blue
-    (0, 255, 255),   # Yellow
-    (0, 100, 255),   # Orange
-    (255, 0, 255),   # Purple
-    (0, 255, 0),     # Green
-    (255, 255, 0)    # Cyan
+    (255, 100, 0), (0, 255, 255), (0, 100,
+                                   255), (255, 0, 255), (0, 255, 0), (255, 255, 0)
 ]
+
+# --- NEW STRICT PLATE VALIDATION FUNCTION ---
+
+
+def is_valid_plate(text):
+    # Must be standard plate length
+    if not (4 <= len(text) <= 10):
+        return False
+
+    # Count letters and numbers
+    letters = sum(c.isalpha() for c in text)
+    numbers = sum(c.isdigit() for c in text)
+
+    # Real plates usually have at least 1 letter and at least 2 numbers
+    if letters >= 1 and numbers >= 2:
+        return True
+
+    return False
 
 
 def draw_advanced_box(frame, x1, y1, x2, y2, conf, class_name, in_zone):
@@ -93,7 +109,7 @@ def detect():
         return jsonify({'error': 'No data provided'})
 
     video_id = data.get('video_id')
-    lanes = data.get('lanes')  # Variable length list of 4-point arrays
+    lanes = data.get('lanes')
     simulate_emergency = data.get('simulate_emergency', False)
 
     if not video_id or not lanes or len(lanes) == 0:
@@ -106,7 +122,6 @@ def detect():
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Dynamically build lane polygons
     lane_polygons = [np.array(pts, np.int32).reshape((-1, 1, 2))
                      for pts in lanes]
 
@@ -122,6 +137,7 @@ def detect():
     frames_processed = 0
     total_lane_counts = {f'Lane {i+1}': 0 for i in range(len(lanes))}
     emergency_detected = simulate_emergency
+    detected_plates = set()
 
     for r in results:
         ret, frame = cap.read()
@@ -131,7 +147,6 @@ def detect():
         frames_processed += 1
         current_frame_lanes = {f'Lane {i+1}': 0 for i in range(len(lanes))}
 
-        # Draw dynamic overlays
         overlay = frame.copy()
         for i, poly in enumerate(lane_polygons):
             color = LANE_COLORS[i % len(LANE_COLORS)]
@@ -154,19 +169,38 @@ def detect():
                         emergency_detected = True
 
                     in_zone = False
-                    # Check which dynamic lane the vehicle is in
                     for i, poly in enumerate(lane_polygons):
                         if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
                             current_frame_lanes[f'Lane {i+1}'] += 1
                             total_lane_counts[f'Lane {i+1}'] += 1
                             in_zone = True
-                            break  # Only count in one lane
+                            break
+
+                    # --- OPTIMIZED ANPR PIPELINE ---
+                    if frames_processed % 10 == 0 and (x2 - x1) > 60 and (y2 - y1) > 60:
+                        crop_y1 = y1 + int((y2 - y1) * 0.5)
+                        vehicle_crop = frame[crop_y1:y2, x1:x2]
+
+                        if vehicle_crop.size > 0:
+                            try:
+                                ocr_results = reader.readtext(vehicle_crop)
+                                for res in ocr_results:
+                                    if len(res) == 3:
+                                        _, text, prob = res
+                                        if float(prob) > 0.4:
+                                            clean_text = "".join(
+                                                e for e in text if e.isalnum()).upper()
+
+                                            # Call the new central validation function
+                                            if is_valid_plate(clean_text):
+                                                detected_plates.add(clean_text)
+                            except Exception as e:
+                                print(f"OCR Error: {e}")
 
                     all_confidences.append(conf)
                     draw_advanced_box(frame, x1, y1, x2, y2,
                                       conf, class_name, in_zone)
 
-        # Draw dynamic text above each lane
         for i, poly in enumerate(lane_polygons):
             l_x = int(np.mean(poly[:, 0, 0]))
             text_y = int(np.min(poly[:, 0, 1])) - 15
@@ -175,6 +209,26 @@ def detect():
                         (l_x-30, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
         out.write(frame)
+
+    # --- DIRECT PLATE FALLBACK (For testing raw plate images) ---
+    if frames_processed == 1 and len(detected_plates) == 0:
+        cap = cv2.VideoCapture(input_path)
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            try:
+                ocr_results = reader.readtext(frame)
+                for res in ocr_results:
+                    if len(res) == 3:
+                        _, text, prob = res
+                        if float(prob) > 0.3:
+                            clean_text = "".join(
+                                e for e in text if e.isalnum()).upper()
+
+                            # Call the new central validation function here too!
+                            if is_valid_plate(clean_text):
+                                detected_plates.add(clean_text)
+            except Exception as e:
+                print(f"Fallback OCR Error: {e}")
 
     cap.release()
     out.release()
@@ -193,7 +247,8 @@ def detect():
     else:
         avg_lanes = {k: float(v) for k, v in total_lane_counts.items()}
 
-    optimal_lane = min(avg_lanes.keys(), key=lambda k: avg_lanes[k])
+    optimal_lane = min(
+        avg_lanes.keys(), key=lambda k: avg_lanes[k]) if avg_lanes else "N/A"
 
     return jsonify({
         'type': 'video',
@@ -201,6 +256,7 @@ def detect():
         'lane_densities': avg_lanes,
         'recommended_lane': optimal_lane,
         'emergency_detected': emergency_detected,
+        'plates': list(detected_plates)[:15],
         'avg_confidence': round(avg_conf, 2),
         'frames_processed': frames_processed
     })
