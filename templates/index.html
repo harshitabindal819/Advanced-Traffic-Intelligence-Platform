@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrafficAI — Vehicle Detection System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div class="scanlines"></div>
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🚗</div>
+      <div class="logo-text">TRAFFIC<span>AI</span></div>
+    </div>
+    <div class="header-badge">● YOLOV8 LIVE</div>
+  </header>
+
+  <div class="hero">
+    <div class="hero-tag">// COMPUTER VISION SYSTEM</div>
+    <h1>Real-Time Vehicle<br>Detection Engine</h1>
+    <p>Upload traffic footage or images for instant AI-powered vehicle detection and density analysis</p>
+  </div>
+
+  <div class="container">
+
+    <!-- COLOR LEGEND -->
+    <div class="legend-bar">
+      <span class="legend-title">BOX COLOR KEY →</span>
+
+      <div class="legend-item">
+        <div class="legend-dot green"></div>
+        <div>
+          <div class="legend-label">HIGH CONFIDENCE</div>
+          <div class="legend-sub">≥ 80% sure</div>
+        </div>
+        <div class="tooltip">🟢 Model is 80%+ confident<br>this is a vehicle.<br>Very reliable detection.</div>
+      </div>
+
+      <div class="legend-item">
+        <div class="legend-dot yellow"></div>
+        <div>
+          <div class="legend-label">MEDIUM CONFIDENCE</div>
+          <div class="legend-sub">60–79% sure</div>
+        </div>
+        <div class="tooltip">🟡 Model is 60–79% confident.<br>Likely a vehicle but<br>partially visible or
+          distant.</div>
+      </div>
+
+      <div class="legend-item">
+        <div class="legend-dot red"></div>
+        <div>
+          <div class="legend-label">LOW CONFIDENCE</div>
+          <div class="legend-sub">50–59% sure</div>
+        </div>
+        <div class="tooltip">🔴 Model is 50–59% confident.<br>Vehicle may be occluded,<br>far away, or at frame
+          edge.</div>
+      </div>
+    </div>
+
+    <!-- UPLOAD ZONE -->
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
+      ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+      <div class="upload-icon-wrap">📡</div>
+      <h2>DROP FILE OR CLICK TO UPLOAD</h2>
+      <p>Drag and drop your traffic video or image here</p>
+      <div class="format-tags">
+        <span class="format-tag">MP4</span>
+        <span class="format-tag">AVI</span>
+        <span class="format-tag">MOV</span>
+        <span class="format-tag">JPG</span>
+        <span class="format-tag">PNG</span>
+      </div>
+      <button class="btn-upload" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+        SELECT FILE
+      </button>
+      <input type="file" id="fileInput" accept="video/*,image/*" onchange="handleFile(this)">
+      <div class="selected-file" id="selectedFile"></div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div class="preview-panel" id="previewPanel">
+      <div class="panel-header">
+        <span class="panel-title">// INPUT PREVIEW</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:0.75em;color:var(--muted)" id="fileInfo"></span>
+      </div>
+      <div class="panel-body">
+        <img id="previewImg" style="display:none" alt="preview">
+        <video id="previewVideo" controls style="display:none"></video>
+        <button class="btn-detect" onclick="runDetection()">⚡ RUN DETECTION</button>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div class="loading-panel" id="loadingPanel">
+      <div class="radar">
+        <div class="radar-circle"></div>
+        <div class="radar-circle"></div>
+        <div class="radar-circle"></div>
+        <div class="radar-sweep"></div>
+        <div class="radar-dot"></div>
+      </div>
+      <div class="loading-title">SCANNING</div>
+      <div class="loading-sub" id="loadingMsg">INITIALIZING YOLOV8 ENGINE...</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill"></div>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="results-panel" id="resultsPanel">
+
+      <div class="stats-row">
+
+        <div class="stat-card vehicles">
+          <div class="stat-tooltip">
+            Average number of vehicles<br>
+            detected per frame.<br>
+            Only counts detections ≥ 50% confidence.
+          </div>
+          <div class="stat-icon">🚗</div>
+          <div class="stat-value" id="statVehicles">0</div>
+          <div class="stat-label">AVG VEHICLES / FRAME</div>
+        </div>
+
+        <div class="stat-card confidence">
+          <div class="stat-tooltip">
+            Average confidence score<br>
+            across all vehicle detections.<br>
+            Higher = more accurate detections.
+          </div>
+          <div class="stat-icon">🎯</div>
+          <div class="stat-value" id="statConf">0%</div>
+          <div class="stat-label">AVG CONFIDENCE</div>
+        </div>
+
+        <div class="stat-card frames">
+          <div class="stat-tooltip">
+            Total number of video frames<br>
+            analyzed by YOLOv8.<br>
+            Each frame = one image scan.
+          </div>
+          <div class="stat-icon">🎬</div>
+          <div class="stat-value" id="statFrames">—</div>
+          <div class="stat-label">FRAMES PROCESSED</div>
+        </div>
+
+        <div class="stat-card density">
+          <div class="stat-tooltip">
+            Traffic density level based on<br>
+            avg vehicles per frame.<br>
+            LOW &lt;3 · MEDIUM 3–6 · HIGH &gt;6
+          </div>
+          <div class="stat-icon">📊</div>
+          <div class="stat-value" style="font-size:1.6em" id="statDensityVal">—</div>
+          <div class="stat-label">TRAFFIC DENSITY</div>
+          <div id="densityBadge"></div>
+        </div>
+
+      </div>
+
+      <!-- Output -->
+      <div class="output-panel">
+        <div class="panel-header">
+          <span class="panel-title">// DETECTION OUTPUT</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:0.75em;color:var(--accent2)">✓
+            COMPLETE</span>
+        </div>
+        <div class="output-body">
+          <img id="outputImg" style="display:none" alt="output">
+          <video id="outputVideo" controls style="display:none"></video>
+          <div class="action-row">
+            <a id="downloadBtn" class="btn-action btn-download" download>⬇ DOWNLOAD RESULT</a>
+            <button class="btn-action btn-reset" onclick="resetPage()">↺ NEW DETECTION</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    TRAFFICAI &nbsp;|&nbsp; POWERED BY <span>YOLOV8</span> &nbsp;|&nbsp; REAL-TIME VEHICLE DETECTION
+  </footer>
+
+  <script>
+    let selectedFile = null;
+    const loadingMessages = [
+      'INITIALIZING YOLOV8 ENGINE...',
+      'LOADING NEURAL NETWORK WEIGHTS...',
+      'PROCESSING FRAMES...',
+      'RUNNING OBJECT DETECTION...',
+      'DRAWING BOUNDING BOXES...',
+      'CALCULATING CONFIDENCE SCORES...',
+      'FINALIZING RESULTS...'
+    ];
+    let msgInterval;
+
+    function handleDragOver(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag-over'); }
+    function handleDragLeave(e) { document.getElementById('uploadZone').classList.remove('drag-over'); }
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('uploadZone').classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+    }
+
+    function handleFile(input) { if (input.files[0]) processFile(input.files[0]); }
+
+    function processFile(file) {
+      selectedFile = file;
+      const size = (file.size / (1024 * 1024)).toFixed(1);
+      document.getElementById('selectedFile').style.display = 'inline-block';
+      document.getElementById('selectedFile').textContent = `📎 ${file.name}`;
+      document.getElementById('fileInfo').textContent = `${file.name} · ${size} MB`;
+      document.getElementById('previewPanel').style.display = 'block';
+
+      const url = URL.createObjectURL(file);
+      if (file.type.startsWith('image/')) {
+        document.getElementById('previewImg').src = url;
+        document.getElementById('previewImg').style.display = 'block';
+        document.getElementById('previewVideo').style.display = 'none';
+      } else {
+        document.getElementById('previewVideo').src = url;
+        document.getElementById('previewVideo').style.display = 'block';
+        document.getElementById('previewImg').style.display = 'none';
+      }
+      document.getElementById('previewPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function runDetection() {
+      if (!selectedFile) return;
+      document.getElementById('previewPanel').style.display = 'none';
+      document.getElementById('loadingPanel').style.display = 'block';
+      document.getElementById('resultsPanel').style.display = 'none';
+
+      let i = 0;
+      msgInterval = setInterval(() => {
+        document.getElementById('loadingMsg').textContent = loadingMessages[i % loadingMessages.length];
+        i++;
+      }, 1800);
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      fetch('/detect', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+          clearInterval(msgInterval);
+          document.getElementById('loadingPanel').style.display = 'none';
+          document.getElementById('resultsPanel').style.display = 'block';
+
+          // Stats
+          document.getElementById('statVehicles').textContent = data.total_vehicles;
+          const confPct = Math.round(parseFloat(data.avg_confidence) * 100);
+          document.getElementById('statConf').textContent = confPct + '%';
+          document.getElementById('statFrames').textContent = data.frames_processed || '1';
+
+          // Density
+          const avg = parseFloat(data.total_vehicles);
+          let densityLabel, densityClass, densityEmoji;
+          if (avg < 3) { densityLabel = 'LOW'; densityClass = 'density-low'; densityEmoji = '🟢'; }
+          else if (avg < 6) { densityLabel = 'MEDIUM'; densityClass = 'density-medium'; densityEmoji = '🟡'; }
+          else { densityLabel = 'HIGH'; densityClass = 'density-high'; densityEmoji = '🔴'; }
+
+          document.getElementById('statDensityVal').textContent = densityEmoji;
+          document.getElementById('densityBadge').innerHTML =
+            `<div class="density-badge ${densityClass}">${densityLabel}</div>`;
+
+          // Output
+          const outputSrc = '/static/' + data.output + '?t=' + Date.now();
+          const dlBtn = document.getElementById('downloadBtn');
+
+          if (data.type === 'image') {
+            const img = document.getElementById('outputImg');
+            img.src = outputSrc; img.style.display = 'block';
+            document.getElementById('outputVideo').style.display = 'none';
+            dlBtn.href = outputSrc; dlBtn.download = 'detection_result.jpg';
+          } else {
+            const vid = document.getElementById('outputVideo');
+            vid.src = outputSrc; vid.style.display = 'block';
+            document.getElementById('outputImg').style.display = 'none';
+            dlBtn.href = outputSrc; dlBtn.download = 'detection_result.mp4';
+          }
+
+          document.getElementById('resultsPanel').scrollIntoView({ behavior: 'smooth' });
+        })
+        .catch(err => {
+          clearInterval(msgInterval);
+          document.getElementById('loadingPanel').style.display = 'none';
+          alert('Detection failed: ' + err.message);
+        });
+    }
+
+    function resetPage() { location.reload(); }
+  </script>
+</body>
+
+</html>
